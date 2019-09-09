@@ -9,63 +9,92 @@ class TestIngestData(unittest.TestCase):
     def setUpClass(cls):
         cls.TestIngestData = IngestData()
 
-    def test_run_valid_paths(self):
+    def test_set_input_path_valid_paths(self):
         valid_test_paths = ["correct.csv", "correct.json", "correct.sac", "correct.wav", "different_filename.csv",
                               "123NumbersAnd_Caps.csv", r"C:\\longer_test\string\with\file\over\here.csv",
                               "/what/about/absolute/linux/paths.csv", "../or/relative/paths.csv",
                               r".\and\windows\relative\paths.csv", "./local_linux_path.csv"]
 
         for valid_path in valid_test_paths:
-            TestIngestData.run(valid_path)
+            self.TestIngestData.set_input_path(valid_path)
             self.assertEqual(self.TestIngestData.input_path, valid_path)
 
-    def test_run_failing_paths(self):
+    def test_set_input_path_failing_paths(self):
         failing_test_paths = [""]
 
         for failing_path in failing_test_paths:
-            self.assertRaises(self.TestIngestData.run(failing_path), ValueError)
+            self.assertRaises(ValueError, self.TestIngestData.set_input_path, failing_path)
 
 
     def test_file_type_check_csv(self):
         self.TestIngestData.input_path = "correct.csv"
-        self.assertEqual(self.TestIngestData.file_type_check, "csv")
+        self.assertEqual(self.TestIngestData.file_type_check(), "csv")
 
 
     def test_file_type_check_json(self):
         self.TestIngestData.input_path = "correct.json"
-        self.assertEqual(self.TestIngestData.file_type_check, "json")
+        self.assertEqual(self.TestIngestData.file_type_check(), "json")
 
 
     def test_file_type_check_sac(self):
         self.TestIngestData.input_path = "correct.sac"
-        self.assertEqual(self.TestIngestData.file_type_check, "sac")
+        self.assertEqual(self.TestIngestData.file_type_check(), "sac")
 
 
     def test_file_type_check_wav(self):
         self.TestIngestData.input_path = "correct.wav"
-        self.assertEqual(self.TestIngestData.file_type_check, "wav")
+        self.assertEqual(self.TestIngestData.file_type_check(), "wav")
 
 
     def test_file_type_check_longer(self):
         self.TestIngestData.input_path = "different_filename_which_is_quite_a_bit_Longer.csv"
-        self.assertEqual(self.TestIngestData.file_type_check, "csv")
+        self.assertEqual(self.TestIngestData.file_type_check(), "csv")
 
 
     def test_file_type_check_allowed_chars(self):
         self.TestIngestData.input_path = "123NumbersAnd_Caps_are_expected.csv"
-        self.assertEqual(self.TestIngestData.file_type_check, "csv")
+        self.assertEqual(self.TestIngestData.file_type_check(), "csv")
+
+
+    def test_file_type_check_dot_in_directory_with_extension(self):
+        self.TestIngestData.input_path = "test/path/with.dot/and.csv"
+        self.assertEqual(self.TestIngestData.file_type_check(), "csv")
+
+
+    def test_file_type_check_dot_in_directory_with_no_extension(self):
+        with self.assertRaises(ValueError) as cm:
+            self.TestIngestData.input_path = "test/path/with.dot/and/no_extension"
+            self.TestIngestData.file_type_check()
+
+        self.assertEqual(str(cm.exception), "Error, no file extension in filename")
 
 
     def test_file_type_check_non_allowed_chars(self):
-        self.TestIngestData.input_path = "a!£$%^&*()=+|<>?/`¬@;:.csv"
-        self.assertFalse(self.TestIngestData.file_type_check)
+        with self.assertRaises(ValueError) as cm:
+            self.TestIngestData.input_path = "a!£$%^&*()=+.|<>?/`¬@;:.csv"
+            self.TestIngestData.file_type_check()
+
+        self.assertEqual(str(cm.exception), "Error, unsupported characters in filename")
 
 
     def test_file_type_check_no_extension(self):
-        self.TestIngestData.input_path = "no_extension"
-        self.assertFalse(self.TestIngestData.file_type_check)
+        with self.assertRaises(ValueError) as cm:
+            self.TestIngestData.input_path = "no_extension"
+            self.TestIngestData.file_type_check()
+
+        self.assertEqual(str(cm.exception), "Error, no file extension in filename")
 
 
     def test_file_type_check_no_filename(self):
-        self.TestIngestData.input_path = ""
-        self.assertFalse(self.TestIngestData.file_type_check)
+        with self.assertRaises(ValueError) as cm:
+            self.TestIngestData.input_path = ""
+            self.TestIngestData.file_type_check()
+
+        self.assertEqual(str(cm.exception), "Error, invalid path to data file")
+
+    def test_file_type_check_only_directory(self):
+        with self.assertRaises(ValueError) as cm:
+            self.TestIngestData.input_path = "/path/to/the/data/directory/only/"
+            self.TestIngestData.file_type_check()
+
+        self.assertEqual(str(cm.exception), "Error, path only points to directory")
