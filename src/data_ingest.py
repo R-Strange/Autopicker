@@ -9,6 +9,8 @@ class IngestData:
         self.input_path = ""
         self.data_format = False
         self.viable_flag = False
+        self.length_of_input = 0
+
 
     def run(self, input_path):
         """

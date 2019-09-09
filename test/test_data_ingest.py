@@ -1,7 +1,5 @@
 import unittest
-
 from data_ingest import IngestData
-
 
 class TestIngestData(unittest.TestCase):
 
@@ -98,3 +96,26 @@ class TestIngestData(unittest.TestCase):
             self.TestIngestData.file_type_check()
 
         self.assertEqual(str(cm.exception), "Error, path only points to directory")
+
+    def test_csv_load_happy(self):
+        self.TestIngestData.input_path = "test_data/ingestion/Specimen_Event.csv"
+        self.TestIngestData.csv_load()
+        self.assertEqual(self.TestIngestData.length_of_input, 30000)
+
+    def test_csv_load_lazy(self):
+        with self.assertRaises(ValueError) as cm:
+            self.TestIngestData.input_path = "test_data/ingestion/Empty_Event.csv"
+            self.TestIngestData.csv_load()
+        self.assertEqual(str(cm.exception), "Error, file is empty")
+
+    def test_csv_load_sad(self):
+        with self.assertRaises(ValueError) as cm:
+            self.TestIngestData.input_path = "test_data/ingestion/Sad_Event.csv"
+            self.TestIngestData.csv_load()
+        self.assertEqual(str(cm.exception), "Error, data is incorrectly formatted or corrupt")
+
+    def test_csv_load_missing(self):
+        with self.assertRaises(FileNotFoundError):
+            self.TestIngestData.input_path = "test_data/ingestion/Nonexistent_Event.csv"
+            self.TestIngestData.csv_load()
+        self.assertEqual(str(cm.exception), "Error, the file cannot be found")
