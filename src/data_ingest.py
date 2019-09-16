@@ -8,6 +8,7 @@ from obspy.core import AttribDict
 from data_classes import SacDataClass
 from obspy import UTCDateTime
 
+# ToDo pass csv values into a dataclass
 
 class IngestData:
 
@@ -28,9 +29,26 @@ class IngestData:
         """
         core function for the method.
         :param input_path:
-        :return:
+        :return: dataclass object
         """
-        pass
+        self.set_input_path(input_path)
+        self.file_exists_check()
+        self.data_format = self.file_type_check()
+
+        if not self.file_exists_flag:
+            raise FileNotFoundError("Error, input file does not exist")
+
+        if self.data_format is "csv":
+            self.csv_load()
+            return self.dataframe
+        elif self.data_format is "sac":
+            self.sac_load()
+            return self.sac_dataclass_obj
+        else:
+            raise ValueError("Error, input file is not one of: .csv, .sac")
+
+
+
 
     def set_input_path(self, input_path):
         """
