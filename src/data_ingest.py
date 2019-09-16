@@ -3,6 +3,10 @@ import numpy as np
 import pandas as pd
 import goodtables as gt
 import obspy
+from obspy.core import AttribDict
+
+from data_classes import SacDataClass
+from obspy import UTCDateTime
 
 
 class IngestData:
@@ -18,6 +22,7 @@ class IngestData:
         self.dataframe = None
         self.file_has_errors = -1
         self.file_has_headers = -1
+        self.sac_dataclass_obj = None
 
     def run(self, input_path):
         """
@@ -85,22 +90,59 @@ class IngestData:
 
         return file_extension_flag
 
+    def instantiate_sac_dataclass(self):
+
+        _blank_sac_headers = AttribDict(
+            {'delta': 0, 'depmin': 0, 'depmax': 0, 'scale': 1.0, 'b': 0.0, 'e': 0, 'a': 0,
+             'internal0': 0, 't0': 0, 't5': 0, 't6': 0, 'stla': 0, 'stlo': 0,
+             'stel': 0, 'stdp': 0.0, 'depmen': 0, 'cmpaz': 0, 'cmpinc': 0, 'nzyear': 0,
+             'nzjday': 0, 'nzhour': 0, 'nzmin': 0, 'nzsec': 0, 'nzmsec': 0, 'nvhdr': 0, 'norid': 0, 'nevid': 0,
+             'npts': 0, 'iftype': 0, 'idep': 0, 'leven': 0, 'lpspol': 0, 'lcalda': 0, 'kstnm': 'BLANK',
+             'ka': 'BLANK', 'kt0': 'BLANK', 'kcmpnm': 'BLANK', 'knetwk': 'BLANK', 'kevnm': 'BLANK'})
+
+        _local_sac_dataclass = SacDataClass("blank_source", "no_network", "no_station", "no_location", "no_channel",
+                                            UTCDateTime("1970-01-01T12:00:00"), UTCDateTime("1970-01-01T12:00:01"), 200,
+                                            0.005, 500, _blank_sac_headers, "sac", 1.0)
+
+        self.sac_dataclass_obj = _local_sac_dataclass
+
+    def map_sac_to_dataclass(self):
+        pass
+
+        self.instantiate_sac_dataclass()
+
+        self.sac_dataclass_obj.payload = self.sac_trace.data
+        self.sac_dataclass_obj.network = self.sac_trace.stats.network
+        self.sac_dataclass_obj.station = self.sac_trace.stats.station
+        self.sac_dataclass_obj.location = self.sac_trace.stats.location
+        self.sac_dataclass_obj.channel = self.sac_trace.stats.channel
+        self.sac_dataclass_obj.start_time = self.sac_trace.stats.starttime
+        self.sac_dataclass_obj.end_time = self.sac_trace.stats.endtime
+        self.sac_dataclass_obj.sampling_rate = self.sac_trace.stats.sampling_rate
+        self.sac_dataclass_obj.delta = self.sac_trace.stats.delta
+        self.sac_dataclass_obj.number_of_points = self.sac_trace.stats.npts
+        self.sac_dataclass_obj.scale_factor = self.sac_trace.stats.calib
+        self.sac_dataclass_obj.format = self.sac_trace.stats._format
+        self.sac_dataclass_obj.sac_header = dict(self.sac_trace.stats.sac)
+
     def reconstruct_seconds_from_sac(self):
         """
 
         :return:
         ToDo move to utils file
         """
-        pass
-        # stats = self.sac_trace.stats
-        #
-        # start_time = 0
-        # end_time = stats.npts / stats.sampling_rate
-        # step_size = stats.delta
-        #
-        # self.seconds_array = np.arange(start=start_time,
-        #                                stop=end_time,
-        #                                step=step_size)
+        if self.sac_dataclass_obj.number_of_points <= 0:
+            raise ValueError("Error, number of datapoints must be greater than 0")
+        elif not isinstance(self.sac_dataclass_obj.number_of_points, int):
+            raise ValueError("Error, number of datapoints expected as an Int")
+
+
+        seconds_array = np.arange(start=0,
+                                  stop=self.sac_dataclass_obj.number_of_points / self.sac_dataclass_obj.sampling_rate,
+                                  step=self.sac_dataclass_obj.delta)
+
+        return seconds_array
+
 
     def csv_file_errors_check(self):
         """
@@ -171,14 +213,20 @@ class IngestData:
         except FileNotFoundError:
             raise FileNotFoundError("The sac file cannot be found, Is the path correct or does the file exist?")
 
-        stream = obspy.read(self.input_path)
+        try:
+            stream = obspy.read(self.input_path)
+        except TypeError:
+            raise ValueError("Error, the sac file cannot be read, and may be empty or corrupted")
 
-        trace = stream[0].data
-        metadata = stream[0].stats
+        self.sac_trace = stream[0]
 
-        reconstruct_seconds()
+        self.map_sac_to_dataclass()
 
-        self.shape_of_input
+        seconds_array = self.reconstruct_seconds_from_sac()
+
+        assert(len(seconds_array) == self.sac_dataclass_obj.number_of_points)
+
+        self.shape_of_input = (len(seconds_array), 2)
 
     def data_check(self):
         """

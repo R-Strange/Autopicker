@@ -1,6 +1,13 @@
 from unittest import TestCase, main
 from unittest.mock import *
+
+import obspy
+from obspy import UTCDateTime
+from obspy.core import AttribDict
+
 from data_ingest import IngestData
+
+import numpy as np
 
 
 # noinspection SpellCheckingInspection
@@ -9,6 +16,10 @@ class TestIngestData(TestCase):
     @classmethod
     def setUpClass(cls):
         cls.TestIngestData = IngestData()
+
+    def tearDown(self):
+        self.TestIngestData.sac_dataclass_obj = None
+        self.TestIngestData.shape_of_input = None
 
     def test_set_input_path_valid_paths(self):
         valid_test_paths = ["correct.csv", "correct.sac", "different_filename.csv",
@@ -85,7 +96,6 @@ class TestIngestData(TestCase):
     def test_csv_load_happy(self):
         self.TestIngestData.input_path = "../test_data/ingestion/Specimen_Event.csv"
         self.TestIngestData.csv_load()
-        print(self.TestIngestData.shape_of_input)
         self.assertEqual(self.TestIngestData.shape_of_input, (30001, 2))
 
     def test_csv_load_lazy(self):
@@ -111,19 +121,19 @@ class TestIngestData(TestCase):
         self.TestIngestData.sac_load()
         self.assertEqual(self.TestIngestData.shape_of_input, (30001, 2))
 
-    def test_file_errors_check_csv_happy_horizontal(self):
+    def test_file_errors_check_sac_happy_horizontal(self):
         self.TestIngestData.input_path="../test_data/ingestion/20110829.002440.YW.NAB1.HHE.SAC"
         self.TestIngestData.sac_load()
         self.assertEqual(self.TestIngestData.shape_of_input, (30001, 2))
 
 
-    def test_file_errors_check_csv_happy_lateral(self):
+    def test_file_errors_check_sac_happy_lateral(self):
         self.TestIngestData.input_path="../test_data/ingestion/20110829.002440.YW.NAB1.HHN.SAC"
         self.TestIngestData.sac_load()
         self.assertEqual(self.TestIngestData.shape_of_input, (30001, 2))
 
 
-    def test_file_errors_check_csv_happy_vertical(self):
+    def test_file_errors_check_sac_happy_vertical(self):
         self.TestIngestData.input_path="../test_data/ingestion/20110829.002440.YW.NAB1.HHZ.SAC"
         self.TestIngestData.sac_load()
         self.assertEqual(self.TestIngestData.shape_of_input, (30001, 2))
@@ -133,19 +143,19 @@ class TestIngestData(TestCase):
         with self.assertRaises(ValueError) as cm:
             self.TestIngestData.input_path = "../test_data/ingestion/Empty_Event.sac"
             self.TestIngestData.sac_load()
-        self.assertEqual(str(cm.exception), "Error, file is empty")
+        self.assertEqual(str(cm.exception), "Error, the sac file cannot be read, and may be empty or corrupted")
 
     def test_sac_load_sad(self):
         with self.assertRaises(ValueError) as cm:
-            self.TestIngestData.input_path = "../test_data/ingestion/Sad_Event.sac"
+            self.TestIngestData.input_path = "../test_data/ingestion/Corrupted_Event.sac"
             self.TestIngestData.sac_load()
-        self.assertEqual(str(cm.exception), "Error, data is incorrectly formatted or corrupt")
+        self.assertEqual(str(cm.exception), "Error, the sac file cannot be read, and may be empty or corrupted")
 
     def test_sac_load_missing(self):
         with self.assertRaises(FileNotFoundError) as cm:
             self.TestIngestData.input_path = "../test_data/ingestion/Nonexistent_Event.sac"
             self.TestIngestData.sac_load()
-        self.assertEqual(str(cm.exception), "Error, the file cannot be found")
+        self.assertEqual(str(cm.exception), "The sac file cannot be found, Is the path correct or does the file exist?")
 
     def test_file_exists_check_happy(self):
         self.TestIngestData.input_path = "../test_data/ingestion/Specimen_Event.csv"
@@ -176,15 +186,93 @@ class TestIngestData(TestCase):
         self.assertTrue(self.TestIngestData.file_has_errors)
         self.assertFalse(self.TestIngestData.file_has_headers)
 
+    def test_instantiate_sac_dataclass(self):
+        self.assertIsNone(self.TestIngestData.sac_dataclass_obj)
+        self.TestIngestData.instantiate_sac_dataclass()
+        self.assertIsNotNone(self.TestIngestData.sac_dataclass_obj)
+
+    def test_map_sac_to_dataclass(self):
+        self.TestIngestData.input_path = "../test_data/ingestion/Specimen_Event.sac"
+        stream = obspy.read(self.TestIngestData.input_path)
+        self.TestIngestData.sac_trace=stream[0]
+        self.TestIngestData.map_sac_to_dataclass()
+
+
+        self.assertEqual(self.TestIngestData.sac_dataclass_obj.network ,"YW")
+        self.assertEqual(self.TestIngestData.sac_dataclass_obj.station ,"NAB1")
+        self.assertEqual(self.TestIngestData.sac_dataclass_obj.location ,"")
+        self.assertEqual(self.TestIngestData.sac_dataclass_obj.channel ,"HHE")
+        self.assertEqual(self.TestIngestData.sac_dataclass_obj.start_time ,UTCDateTime("2011-08-29T00:23:00.330000Z"))
+        self.assertEqual(self.TestIngestData.sac_dataclass_obj.end_time ,UTCDateTime("2011-08-29T00:28:00.330000Z"))
+        self.assertEqual(self.TestIngestData.sac_dataclass_obj.sampling_rate ,100.0)
+        self.assertEqual(self.TestIngestData.sac_dataclass_obj.delta ,0.01)
+        self.assertEqual(self.TestIngestData.sac_dataclass_obj.number_of_points ,30001)
+        self.assertEqual(self.TestIngestData.sac_dataclass_obj.scale_factor ,1.0)
+
+
+    def test_sac_data_load(self):
+        self.TestIngestData.input_path = "../test_data/ingestion/Specimen_Event.sac"
+        stream = obspy.read(self.TestIngestData.input_path)
+        self.TestIngestData.sac_trace=stream[0]
+        self.TestIngestData.map_sac_to_dataclass()
+
+        self.assertSequenceEqual(self.TestIngestData.sac_dataclass_obj.payload.tolist(), stream[0].data.tolist())
+
+    # def test_reconstruct_seconds_from_sac_happy(self):
+    #     """mock trace"""
+    #
+    #
+    #     self.mock_stream.trace.stats.npts = MagicMock(return_value=30001)
+    #     self.mock_stream.trace.stats.
+    #
+    #     self.TestIngestData.
+
     def test_reconstruct_seconds_from_sac_happy(self):
-        """mock trace"""
+        self.TestIngestData.input_path = "../test_data/ingestion/Specimen_Event.sac"
+        stream = obspy.read(self.TestIngestData.input_path)
+        self.TestIngestData.sac_trace=stream[0]
+        self.TestIngestData.map_sac_to_dataclass()
+
+        self.assertSequenceEqual(self.TestIngestData.reconstruct_seconds_from_sac().tolist(),
+                         np.arange(start=0, stop=30001 / 100, step=0.01).tolist())
+
+    def test_reconstruct_seconds_from_sac_sad_zero_npts(self):
+        self.TestIngestData.input_path = "../test_data/ingestion/Specimen_Event.sac"
+        stream = obspy.read(self.TestIngestData.input_path)
+        self.TestIngestData.sac_trace=stream[0]
+        self.TestIngestData.map_sac_to_dataclass()
+
+        self.TestIngestData.sac_dataclass_obj.number_of_points = 0
+
+        with self.assertRaises(ValueError) as cm:
+            self.TestIngestData.reconstruct_seconds_from_sac()
+            self.assertEqual(str(cm.exception), "Error, number of datapoints must be greater than 0")
+
+    def test_reconstruct_seconds_from_sac_sad_low_npts(self):
+        self.TestIngestData.input_path = "../test_data/ingestion/Specimen_Event.sac"
+        stream = obspy.read(self.TestIngestData.input_path)
+        self.TestIngestData.sac_trace = stream[0]
+        self.TestIngestData.map_sac_to_dataclass()
+
+        self.TestIngestData.sac_dataclass_obj.number_of_points = -1
+
+        with self.assertRaises(ValueError) as cm:
+            self.TestIngestData.reconstruct_seconds_from_sac()
+            self.assertEqual(str(cm.exception), "Error, number of datapoints must be greater than 0")
+
+    def test_reconstruct_seconds_from_sac_sad_nonint_npts(self):
+        self.TestIngestData.input_path = "../test_data/ingestion/Specimen_Event.sac"
+        stream = obspy.read(self.TestIngestData.input_path)
+        self.TestIngestData.sac_trace = stream[0]
+        self.TestIngestData.map_sac_to_dataclass()
+
+        self.TestIngestData.sac_dataclass_obj.number_of_points = 14.2
+
+        with self.assertRaises(ValueError) as cm:
+            self.TestIngestData.reconstruct_seconds_from_sac()
+            self.assertEqual(str(cm.exception), "Error, number of datapoints expected as an Int")
 
 
-        self.mock_stream.trace.stats.npts = MagicMock(return_value=30001)
-        self.mock_stream.trace.stats.
-
-        self.TestIngestData.
-
-
+        #with
 if __name__ == '__main__':
     main()
